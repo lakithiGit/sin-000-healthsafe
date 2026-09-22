@@ -43,11 +43,11 @@ public class IngestionServiceApp {
                 String department = cleanDepartment(row[2]);
                 Integer beds = cleanBeds(row[3]);
 
-                wards.add(new Ward(
-                        wardId,
-                        wing,
-                        department,
-                        beds
+                addOrUpdateWard(new Ward(
+                    wardId,
+                    wing,
+                    department,
+                    beds
                 ));
             }
 
@@ -112,5 +112,25 @@ public class IngestionServiceApp {
         } catch (NumberFormatException e) {
             return null;
         }
+    }
+    
+    private static void addOrUpdateWard(Ward newWard) {
+            for (int i = 0; i < wards.size(); i++) {
+
+                Ward existingWard = wards.get(i);
+
+                if (existingWard.getWardId().equals(newWard.getWardId())) {
+
+                    if (existingWard.getBedsAvailable() == null
+                        && newWard.getBedsAvailable() != null) {
+
+                    wards.set(i, newWard);
+                }
+
+                return;
+            }
+        }
+
+        wards.add(newWard);
     }
 }
