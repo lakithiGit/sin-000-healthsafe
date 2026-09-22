@@ -91,6 +91,10 @@ public class IngestionServiceApp {
             return "Paediatrics";
         }
 
+        if ("Icu".equals(cleaned)) {
+            return "ICU";
+        }
+
         return cleaned;
     }
 
