@@ -6,9 +6,11 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.javalin.Javalin;
 import org.apache.activemq.ActiveMQConnectionFactory;
 
+import javax.jms.Queue;
 import javax.jms.Connection;
 import javax.jms.Message;
 import javax.jms.MessageConsumer;
+import javax.jms.MessageProducer;
 import javax.jms.Session;
 import javax.jms.Topic;
 import javax.jms.TextMessage;
@@ -85,6 +87,61 @@ public class WardServiceApp {
             ctx.json(departments);
         });
     }
+
+    private static void publishEquipmentFailure(Ward ward) {
+
+    try {
+
+        ActiveMQConnectionFactory factory =
+                new ActiveMQConnectionFactory(MqConfig.BROKER_URL);
+
+        try (Connection connection = factory.createConnection()) {
+
+            connection.start();
+
+            try (Session session =
+                         connection.createSession(
+                                 false,
+                                 Session.AUTO_ACKNOWLEDGE)) {
+
+                Queue queue =
+                        session.createQueue(MqConfig.QUEUE);
+
+                MessageProducer producer =
+                        session.createProducer(queue);
+
+                String messageText =
+                        "Equipment failure detected in ward "
+                                + ward.getWardId()
+                                + " (" + ward.getDepartment() + ")";
+
+                TextMessage message =
+                        session.createTextMessage(messageText);
+
+                // Persistent delivery means the broker stores
+                // the message so it survives until delivered.
+                message.setJMSDeliveryMode(
+                        javax.jms.DeliveryMode.PERSISTENT
+                );
+
+                producer.send(message);
+
+                producer.close();
+
+                System.out.println(
+                        "Published equipment failure: "
+                                + messageText
+                );
+            }
+        }}
+    catch (Exception e) {
+
+        System.err.println(
+                "Failed to publish equipment failure: "
+                        + e.getMessage()
+            );
+        }
+    } 
 
     private static void loadWards() {
 
