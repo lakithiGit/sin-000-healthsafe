@@ -1,9 +1,17 @@
 package co.wethinkcode.healthsafe;
 
+import co.wethinkcode.healthsafe.mq.MqConfig;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.javalin.Javalin;
+import org.apache.activemq.ActiveMQConnectionFactory;
 
+import javax.jms.Connection;
+import javax.jms.Message;
+import javax.jms.MessageConsumer;
+import javax.jms.Session;
+import javax.jms.Topic;
+import javax.jms.TextMessage;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -15,10 +23,13 @@ import java.util.stream.Collectors;
 public class WardServiceApp {
 
     private static final List<Ward> wards = new ArrayList<>();
+    private static final ObjectMapper mapper = new ObjectMapper();
 
     public static void main(String[] args) {
 
         loadWards();
+
+        startStaffingEventConsumer();
 
         Javalin app = Javalin.create().start(7031);
 
@@ -66,9 +77,10 @@ public class WardServiceApp {
                     .build();
 
             HttpResponse<String> response =
-                    client.send(request, HttpResponse.BodyHandlers.ofString());
-
-            ObjectMapper mapper = new ObjectMapper();
+                    client.send(
+                            request,
+                            HttpResponse.BodyHandlers.ofString()
+                    );
 
             List<Ward> loadedWards = mapper.readValue(
                     response.body(),
@@ -79,6 +91,133 @@ public class WardServiceApp {
 
         } catch (Exception e) {
             e.printStackTrace();
+        }
+    }
+
+    private static void startStaffingEventConsumer() {
+
+        Thread consumerThread = new Thread(() -> {
+
+            try {
+
+                ActiveMQConnectionFactory factory =
+                        new ActiveMQConnectionFactory(MqConfig.BROKER_URL);
+
+                Connection connection = factory.createConnection();
+
+                connection.start();
+
+                Session session =
+                        connection.createSession(
+                                false,
+                                Session.AUTO_ACKNOWLEDGE
+                        );
+
+                Topic topic =
+                        session.createTopic(MqConfig.TOPIC);
+
+                MessageConsumer consumer =
+                        session.createConsumer(topic);
+
+                System.out.println(
+                        "Ward Service subscribed to "
+                                + MqConfig.TOPIC
+                );
+
+                while (true) {
+
+                    Message message = consumer.receive();
+
+                    if (message instanceof TextMessage) {
+
+                        String json =
+                                ((TextMessage) message).getText();
+
+                        System.out.println(
+                                "Received staffing event: "
+                                        + json
+                        );
+
+                        handleStaffingEvent(json);
+                    }
+                }
+
+            } catch (Exception e) {
+
+                System.err.println(
+                        "Staffing event consumer stopped: "
+                                + e.getMessage()
+                );
+            }
+
+        });
+
+        consumerThread.setDaemon(true);
+        consumerThread.start();
+    }
+
+    private static void handleStaffingEvent(String json) {
+
+        try {
+
+            JsonStaffingEvent event =
+                    mapper.readValue(json, JsonStaffingEvent.class);
+
+            System.out.println(
+                    "Ward " + event.getWardId()
+                            + " staffing updated: "
+                            + event.getSchedule()
+            );
+
+        } catch (Exception e) {
+
+            System.err.println(
+                    "Invalid staffing event: "
+                            + e.getMessage()
+            );
+        }
+    }
+
+    public static class JsonStaffingEvent {
+
+        private String wardId;
+        private String department;
+        private int alertLevel;
+        private String schedule;
+
+        public JsonStaffingEvent() {
+        }
+
+        public String getWardId() {
+            return wardId;
+        }
+
+        public void setWardId(String wardId) {
+            this.wardId = wardId;
+        }
+
+        public String getDepartment() {
+            return department;
+        }
+
+        public void setDepartment(String department) {
+            this.department = department;
+        }
+
+        public int getAlertLevel() {
+            return alertLevel;
+        }
+
+        public void setAlertLevel(int alertLevel) {
+            this.alertLevel = alertLevel;
+        }
+
+        public String getSchedule() {
+            return schedule;
+        }
+
+        public void setSchedule(String schedule) {
+            this.schedule = schedule;
         }
     }
 }

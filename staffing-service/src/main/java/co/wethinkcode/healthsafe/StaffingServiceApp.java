@@ -1,13 +1,23 @@
 package co.wethinkcode.healthsafe;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import io.javalin.Javalin;
-
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+
+import javax.jms.Connection;
+import javax.jms.MessageProducer;
+import javax.jms.Session;
+import javax.jms.TextMessage;
+import javax.jms.Topic;
+
+import org.apache.activemq.ActiveMQConnectionFactory;
+
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
+import co.wethinkcode.healthsafe.mq.MqConfig;
+import io.javalin.Javalin;
 
 public class StaffingServiceApp {
 
@@ -100,6 +110,9 @@ public class StaffingServiceApp {
                                 schedule
                         );
 
+                // Publish staffing event to ActiveMQ topic
+                publishStaffingEvent(response);
+
                 ctx.json(response);
 
             } catch (Exception e) {
@@ -111,6 +124,49 @@ public class StaffingServiceApp {
                 );
             }
         });
+    }
+
+    private static void publishStaffingEvent(StaffingResponse response) {
+
+        try {
+
+            ActiveMQConnectionFactory factory =
+                    new ActiveMQConnectionFactory(MqConfig.BROKER_URL);
+
+            try (Connection connection = factory.createConnection()) {
+
+                connection.start();
+
+                try (Session session =
+                             connection.createSession(
+                                     false,
+                                     Session.AUTO_ACKNOWLEDGE)) {
+
+                    Topic topic =
+                            session.createTopic(MqConfig.TOPIC);
+
+                    MessageProducer producer =
+                            session.createProducer(topic);
+
+                    String json =
+                            mapper.writeValueAsString(response);
+
+                    TextMessage message =
+                            session.createTextMessage(json);
+
+                    producer.send(message);
+
+                    producer.close();
+                }
+            }
+
+        } catch (Exception e) {
+
+            System.err.println(
+                    "Failed to publish staffing event: "
+                            + e.getMessage()
+            );
+        }
     }
 
     public static class StaffingResponse {
