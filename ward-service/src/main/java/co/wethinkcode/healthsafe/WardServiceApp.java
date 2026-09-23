@@ -53,6 +53,27 @@ public class WardServiceApp {
             }
         });
 
+        app.post("/wards/{id}/equipment-failure", ctx -> {
+
+            String wardId = ctx.pathParam("id").toUpperCase();
+
+            Ward ward = wards.stream()
+                    .filter(w -> w.getWardId().equals(wardId))
+                    .findFirst()
+                    .orElse(null);
+
+            if (ward == null) {
+                ctx.status(404).result("Ward not found");
+                return;
+            }
+
+            publishEquipmentFailure(ward);
+
+            ctx.status(202).result(
+                    "Equipment failure alert published for " + wardId
+            );
+        });
+
         app.get("/departments", ctx -> {
 
             List<String> departments = wards.stream()
